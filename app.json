@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "sssync",
+    "slug": "sssync",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0E8F7F"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF"
+      }
+    },
+    "web": {
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow sssync to access your camera",
+          "microphonePermission": "Allow sssync to access your microphone",
+          "recordAudioAndroid": true
+        }
+      ]
+    ]
+  }
+} 
