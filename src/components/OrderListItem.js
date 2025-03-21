@@ -55,32 +55,63 @@ const OrderListItem = ({ order }) => {
     return 'store-outline'; // Default icon
   };
   
+  // Format date to be more readable
+  const formatDate = (dateString) => {
+    if (!dateString) return 'No date';
+    
+    const date = new Date(dateString);
+    const now = new Date();
+    
+    // Check if date is today
+    if (date.toDateString() === now.toDateString()) {
+      return 'Today';
+    }
+    
+    // Check if date is yesterday
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) {
+      return 'Yesterday';
+    }
+    
+    // Otherwise return formatted date
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    });
+  };
+  
   return (
     <TouchableOpacity style={styles.container}>
       <View style={styles.orderInfo}>
         <View style={styles.orderHeader}>
-          <Text style={styles.orderId}>Order {order.id || 'Unknown'}</Text>
-          <Text style={styles.orderDate}>{order.date || 'No date'}</Text>
+          <View style={styles.orderIdContainer}>
+            <Text style={styles.orderId}>#{order.id || 'Unknown'}</Text>
+            <View style={styles.platformBadge}>
+              <Icon 
+                name={getPlatformIcon(order.platform)} 
+                size={14} 
+                color="#555" 
+                style={styles.platformIcon} 
+              />
+              <Text style={styles.platformName}>{order.platform || 'Unknown'}</Text>
+            </View>
+          </View>
+          <Text style={styles.orderDate}>{formatDate(order.date)}</Text>
         </View>
         
         <View style={styles.customerRow}>
-          <Text style={styles.customerName}>{order.customer || 'Unknown customer'}</Text>
+          <View style={styles.customerInfo}>
+            <Icon name="account" size={14} color="#777" style={styles.customerIcon} />
+            <Text style={styles.customerName}>{order.customer || 'Unknown customer'}</Text>
+          </View>
           <Text style={styles.orderItems}>
             {order.items ? `${order.items} item${order.items > 1 ? 's' : ''}` : ''}
           </Text>
         </View>
         
         <View style={styles.orderFooter}>
-          <View style={styles.platformBadge}>
-            <Icon 
-              name={getPlatformIcon(order.platform)} 
-              size={14} 
-              color="#555" 
-              style={styles.platformIcon} 
-            />
-            <Text style={styles.platformName}>{order.platform || 'Unknown'}</Text>
-          </View>
-          
           <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) + '20' }]}>
             <Icon 
               name={getStatusIcon(order.status)} 
@@ -108,7 +139,8 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 2,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
@@ -118,11 +150,17 @@ const styles = StyleSheet.create({
   orderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  orderIdContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   orderId: {
     fontSize: 15,
     fontWeight: 'bold',
+    marginRight: 8,
   },
   orderDate: {
     fontSize: 13,
@@ -131,23 +169,40 @@ const styles = StyleSheet.create({
   customerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  customerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  customerIcon: {
+    marginRight: 4,
   },
   customerName: {
     fontSize: 14,
+    color: '#444',
   },
   orderItems: {
     fontSize: 13,
     color: '#777',
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
   },
   orderFooter: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   platformBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 8,
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
   },
   platformIcon: {
     marginRight: 4,
@@ -155,26 +210,25 @@ const styles = StyleSheet.create({
   platformName: {
     fontSize: 12,
     color: '#555',
+    fontWeight: '500',
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: 12,
-    marginRight: 8,
   },
   statusIcon: {
     marginRight: 4,
   },
   statusText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   orderTotal: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
-    marginLeft: 'auto',
   },
 });
 

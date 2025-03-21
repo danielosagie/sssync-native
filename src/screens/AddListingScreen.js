@@ -9,9 +9,11 @@ import {
   TextInput,
   ActivityIndicator,
   Switch,
-  Alert
+  Alert,
+  SafeAreaView,
+  Dimensions
 } from 'react-native';
-import { CameraView, CameraType, Camera } from 'expo-camera';
+import { CameraView, Camera } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import Animated, { 
   FadeIn, 
@@ -23,20 +25,33 @@ import Animated, {
   useSharedValue 
 } from 'react-native-reanimated';
 import { useTheme } from '../context/ThemeContext';
+import theme from '../context/ThemeContext';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import PlatformSelector from '../components/PlatformSelector';
 import PlaceholderImage from '../components/PlaceholderImage';
 
-
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const CameraSection = ({ onCapture, onClose }) => {
-  const [permission, requestPermission] = Camera.useCameraPermissions();
-  const [facing, setFacing] = useState<CameraType>("back");
-  const [capturedImages, setCapturedImages] = useState([]);
+  const [cameraPermission, setCameraPermission] = useState();
+  const [facing, setFacing] = useState("back");
+  const [capturedMedia, setCapturedMedia] = useState([]);
+  const [cameraMode, setCameraMode] = useState("picture"); // "picture" or "video"
+  const [recording, setRecording] = useState(false);
+  const [flash, setFlash] = useState("off");
   const cameraRef = useRef(null);
-  const theme = useTheme();
+  const theme = useTheme() || { colors: { primary: '#0E8F7F' } };
+  
+  
+  useEffect(() => {
+    (async () => {
+      const cameraPermissionResponse = await Camera.requestCameraPermissionsAsync();
+      const microphonePermissionResponse = await Camera.requestMicrophonePermissionsAsync();
+      setCameraPermission(cameraPermissionResponse.status === "granted");
+    })();
+  }, []);
 
   const takePicture = async () => {
     if (cameraRef.current) {
@@ -45,42 +60,104 @@ const CameraSection = ({ onCapture, onClose }) => {
           quality: 0.8,
         });
         
-        setCapturedImages([...capturedImages, photo]);
+        setCapturedMedia([...capturedMedia, {
+          type: 'image',
+          uri: photo.uri,
+          width: photo.width,
+          height: photo.height,
+          number: capturedMedia.length + 1
+        }]);
       } catch (error) {
         console.log('Error taking picture', error);
       }
     }
   };
 
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaType.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 1,
-      allowsMultipleSelection: true,
-    });
-    
-    if (!result.canceled && result.assets) {
-      const newImages = result.assets.map(asset => ({
-        uri: asset.uri,
-        width: asset.width,
-        height: asset.height,
-      }));
-      setCapturedImages([...capturedImages, ...newImages]);
+  const startRecording = async () => {
+    if (cameraRef.current) {
+      setRecording(true);
+      try {
+        const videoData = await cameraRef.current.recordAsync({
+          maxDuration: 60, // 1 minute max
+          quality: '720p',
+        });
+        
+        setCapturedMedia([...capturedMedia, {
+          type: 'video',
+          uri: videoData.uri,
+          number: capturedMedia.length + 1
+        }]);
+        setRecording(false);
+      } catch (error) {
+        console.log('Error recording video', error);
+        setRecording(false);
+      }
     }
   };
 
-  const saveAndClose = () => {
-    onCapture(capturedImages);
-    onClose();
+  const stopRecording = () => {
+    if (cameraRef.current && recording) {
+      cameraRef.current.stopRecording();
+      setRecording(false);
+    }
+  };
+
+  const pickMedia = async () => {
+    const options = {
+      mediaTypes: cameraMode === 'picture' 
+        ? ImagePicker.MediaTypeOptions.Images 
+        : ImagePicker.MediaTypeOptions.Videos,
+      allowsEditing: cameraMode === 'picture',
+      aspect: [4, 3],
+      quality: 1,
+      allowsMultipleSelection: cameraMode === 'picture',
+    };
+    
+    const result = await ImagePicker.launchImageLibraryAsync(options);
+    
+    if (!result.canceled && result.assets) {
+      const newMedia = result.assets.map((asset, index) => ({
+        type: asset.type === 'video' ? 'video' : 'image',
+        uri: asset.uri,
+        width: asset.width,
+        height: asset.height,
+        number: capturedMedia.length + index + 1
+      }));
+      setCapturedMedia([...capturedMedia, ...newMedia]);
+    }
+  };
+
+  const toggleCameraMode = () => {
+    setCameraMode(current => current === "picture" ? "video" : "picture");
+  };
+
+  const toggleFlash = () => {
+    setFlash(current => current === "off" ? "on" : "off");
   };
 
   const toggleCameraFacing = () => {
-    setFacing(current => current === CameraType.back ? CameraType.front : CameraType.back);
+    setFacing(current => current === "back" ? "front" : "back");
   };
 
-  if (!permission) {
+  const saveAndClose = () => {
+    onCapture(capturedMedia);
+    onClose();
+  };
+
+  const deleteMedia = (index) => {
+    const newMedia = [...capturedMedia];
+    newMedia.splice(index, 1);
+    
+    // Renumber the remaining items
+    const renumberedMedia = newMedia.map((item, idx) => ({
+      ...item,
+      number: idx + 1
+    }));
+    
+    setCapturedMedia(renumberedMedia);
+  };
+
+  if (cameraPermission === undefined) {
     return (
       <View style={styles.cameraLoading}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -89,14 +166,17 @@ const CameraSection = ({ onCapture, onClose }) => {
     );
   }
 
-  if (!permission.granted) {
+  if (!cameraPermission) {
     return (
       <View style={styles.cameraLoading}>
         <Icon name="camera-off" size={40} color="#FF5252" />
         <Text style={styles.cameraErrorText}>No access to camera</Text>
         <Button 
           title="Grant Permission" 
-          onPress={requestPermission} 
+          onPress={async () => {
+            const { status } = await Camera.requestCameraPermissionsAsync();
+            setCameraPermission(status === "granted");
+          }} 
           style={{ marginTop: 16 }}
         />
         <Button 
@@ -110,58 +190,91 @@ const CameraSection = ({ onCapture, onClose }) => {
   }
 
   return (
-    <View style={styles.cameraContainer}>
+    <SafeAreaView style={styles.cameraContainer}>
+      <View style={styles.cameraHeader}>
+        <TouchableOpacity onPress={onClose} style={styles.headerButton}>
+          <Icon name="close" size={24} color="white" />
+        </TouchableOpacity>
+        
+        <View style={styles.headerControls}>
+          <TouchableOpacity onPress={toggleFlash} style={styles.headerButton}>
+            <Icon name={flash === "on" ? "flash" : "flash-off"} size={24} color="white" />
+          </TouchableOpacity>
+          
+          <TouchableOpacity onPress={toggleCameraFacing} style={styles.headerButton}>
+            <Icon name="camera-switch" size={24} color="white" />
+          </TouchableOpacity>
+        </View>
+      </View>
+      
       <CameraView
         ref={cameraRef}
         style={styles.camera}
         facing={facing}
+        flash={flash}
+        mode={cameraMode}
       >
-        <View style={styles.cameraOverlay}>
-          <View style={styles.cameraBoundingBox}>
-            <Text style={styles.cameraText}>
-              Place your item here
-            </Text>
-          </View>
-          <View style={styles.cameraControls}>
-            <TouchableOpacity 
-              style={styles.cancelButton}
-              onPress={onClose}
-            >
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.captureButton}
-              onPress={takePicture}
-            >
-              <View style={styles.captureInner} />
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.galleryButton}
-              onPress={pickImage}
-            >
-              <Icon name="image-multiple" size={24} color="white" />
-            </TouchableOpacity>
-          </View>
+        <View style={styles.cameraGuide}>
+          {/* Subtle frame guide */}
+          <View style={styles.frameGuide} />
         </View>
       </CameraView>
       
-      {capturedImages.length > 0 && (
+      <View style={styles.controlsContainer}>
+        <TouchableOpacity 
+          style={styles.modeButton}
+          onPress={toggleCameraMode}
+        >
+          <Icon 
+            name={cameraMode === "picture" ? "camera" : "video"} 
+            size={24} 
+            color="white" 
+          />
+          <Text style={styles.modeText}>
+            {cameraMode === "picture" ? "Photo" : "Video"}
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.captureButton}
+          onPress={cameraMode === "picture" ? takePicture : recording ? stopRecording : startRecording}
+        >
+          <View style={[
+            styles.captureInner, 
+            recording && styles.recordingButton
+          ]} />
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.galleryButton}
+          onPress={pickMedia}
+        >
+          <Icon name="image-multiple" size={24} color="white" />
+          <Text style={styles.modeText}>Gallery</Text>
+        </TouchableOpacity>
+      </View>
+      
+      {capturedMedia.length > 0 && (
         <View style={styles.previewContainer}>
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.previewScroll}
           >
-            {capturedImages.map((img, index) => (
+            {capturedMedia.map((media, index) => (
               <View key={index} style={styles.previewImageContainer}>
-                <Image source={{ uri: img.uri }} style={styles.previewImage} />
+                <Image source={{ uri: media.uri }} style={styles.previewImage} />
+                <View style={styles.mediaNumberBadge}>
+                  <Text style={styles.mediaNumber}>{media.number}</Text>
+                </View>
+                {media.type === 'video' && (
+                  <View style={styles.videoIndicator}>
+                    <Icon name="play-circle" size={24} color="white" />
+                  </View>
+                )}
                 <TouchableOpacity 
-                  style={styles.deleteImageButton}
-                  onPress={() => {
-                    const newImages = [...capturedImages];
-                    newImages.splice(index, 1);
-                    setCapturedImages(newImages);
-                  }}
+                  style={styles.deleteMediaButton}
+                  onPress={() => deleteMedia(index)}
                 >
                   <Icon name="close-circle" size={22} color="white" />
                 </TouchableOpacity>
@@ -170,14 +283,14 @@ const CameraSection = ({ onCapture, onClose }) => {
           </ScrollView>
           
           <TouchableOpacity 
-            style={[styles.doneButton, { backgroundColor: theme.colors.primary }]}
+            style={styles.doneButton}
             onPress={saveAndClose}
           >
-            <Text style={styles.doneButtonText}>Done ({capturedImages.length})</Text>
+            <Text style={styles.doneButtonText}>Done ({capturedMedia.length})</Text>
           </TouchableOpacity>
         </View>
       )}
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -432,14 +545,18 @@ const AddListingScreen = () => {
     }, 100);
   };
   
-  const handleTakePicture = async () => {
-    setMode('camera');
-  };
-
-  const handleCapturedImages = (capturedImages) => {
-    const newImages = capturedImages.map(img => img.uri || img);
-    setImages([...images, ...newImages]);
+  const handleCapturedImages = (capturedMedia) => {
+    // Update images state with the captured media
+    const newImages = capturedMedia.map(media => media.uri);
+    setImages(prevImages => [...prevImages, ...newImages]);
+    
+    // Change mode back to form
     setMode('form');
+    
+    // Start AI analysis if you have images
+    if (newImages.length > 0) {
+      startAIAnalysis();
+    }
   };
   
   const publishListing = () => {
@@ -472,7 +589,7 @@ const AddListingScreen = () => {
   const saveDraft = () => {
     const newDraft = {
       id: Date.now(),
-      title: listingData.title,
+      title: listingData.title || 'Untitled Draft',
       description: listingData.description,
       price: listingData.price,
       quantity: listingData.quantity,
@@ -481,12 +598,34 @@ const AddListingScreen = () => {
       createdAt: new Date().toISOString()
     };
     
-    setSavedDrafts([...savedDrafts, newDraft]);
+    setSavedDrafts(prev => [...prev, newDraft]);
     
     Alert.alert(
       "Draft Saved",
       "Your listing has been saved as a draft",
-      [{ text: "OK" }]
+      [{ text: "OK", onPress: () => {
+        // Reset form and go back to dashboard
+        setMode('initial');
+        setImages([]);
+        setListingData({
+          title: '',
+          price: '',
+          description: '',
+          category: '',
+          condition: 'New',
+          quantity: '1',
+          brand: '',
+          platforms: {
+            shopify: true,
+            amazon: true,
+            clover: false,
+            square: false,
+          }
+        });
+        
+        // If using navigation
+        // navigation.goBack();
+      }}]
     );
   };
   
@@ -501,6 +640,7 @@ const AddListingScreen = () => {
           <Animated.View 
             entering={FadeIn.duration(400)} 
             style={styles.initialContainer}
+            paddingTop={60}
           >
             <Icon name="camera-plus" size={80} color={theme.colors.primary} />
             <Text style={styles.initialText}>
@@ -528,7 +668,7 @@ const AddListingScreen = () => {
         return (
           <CameraSection
             onCapture={handleCapturedImages}
-            onClose={() => setMode('initial')}
+            onClose={() => setMode('form')}
           />
         );
         
@@ -572,24 +712,54 @@ const AddListingScreen = () => {
           <Animated.View 
             entering={SlideInUp.duration(400)} 
             style={styles.formContainer}
+            paddingTop={60}
           >
             <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={styles.imagePreviewContainer}>
-                {images.map((uri, index) => (
-                  <Image 
-                    key={index}
-                    size={120}
-                    source={{ uri }}
-                    style={styles.previewImage}
-                  />
-                ))}
-                <TouchableOpacity 
-                  style={[styles.addImageButton, { borderColor: theme.colors.primary + '50' }]}
-                  onPress={() => setMode('camera')}
-                >
-                  <Icon name="camera-plus" size={32} color={theme.colors.primary} />
-                  <Text style={[styles.addImageText, { color: theme.colors.primary }]}>Add Photos</Text>
-                </TouchableOpacity>
+              <View style={styles.imagesSection}>
+                <Text style={styles.sectionTitle}>Images</Text>
+                <Text style={styles.sectionSubtitle}>Add up to 10 images of your product</Text>
+                
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={styles.imagesContainer}>
+                    {images.map((image, index) => (
+                      <View key={index} style={styles.imageContainer}>
+                        <Image source={{ uri: image }} style={styles.image} />
+                        <TouchableOpacity
+                          style={styles.removeImageButton}
+                          onPress={() => {
+                            const newImages = [...images];
+                            newImages.splice(index, 1);
+                            setImages(newImages);
+                          }}
+                        >
+                          <Icon name="close-circle" size={20} color="white" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                    
+                    {images.length < 10 && (
+                      <TouchableOpacity 
+                        style={[
+                          styles.addImageButton, 
+                          { borderColor: theme ? theme.colors.primary + '50' : '#ddd' }
+                        ]} 
+                        onPress={() => setMode('camera')}
+                      >
+                        <Icon 
+                          name="camera-plus" 
+                          size={24} 
+                          color={theme ? theme.colors.primary : '#aaa'} 
+                        />
+                        <Text style={{ 
+                          color: theme ? theme.colors.primary : '#aaa', 
+                          marginTop: 4 
+                        }}>
+                          Add Image
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </ScrollView>
               </View>
               
               <Card>
@@ -698,23 +868,67 @@ const AddListingScreen = () => {
               </Card>
               
               <View style={styles.buttonRow}>
-                <Button 
-                  title="Save Draft" 
-                  onPress={saveDraft} 
-                  outlined
-                  style={styles.draftButton}
-                />
-                <Button 
-                  title={showPreview ? "Edit Listing" : "Preview Listing"} 
-                  onPress={togglePreview} 
-                  outlined
-                  style={styles.previewButton}
-                />
-                <Button 
-                  title="Publish Listing" 
-                  onPress={publishListing} 
-                  style={styles.submitButton}
-                />
+                <TouchableOpacity 
+                  style={[styles.button, styles.draftButton, styles.outlinedButton]} 
+                  onPress={saveDraft}
+                >
+                  <Icon name="content-save-outline" size={20} color={theme.colors.primary} />
+                  <Text style={[styles.buttonText, {color: theme.colors.primary}]}>Save Draft</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.button, styles.previewButton, styles.outlinedButton]} 
+                  onPress={togglePreview}
+                >
+                  <Icon name="eye-outline" size={20} color={theme.colors.primary} />
+                  <Text style={[styles.buttonText, {color: theme.colors.primary}]}>
+                    {showPreview ? "Edit" : "Preview"}
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.button, styles.optimizeButton, styles.outlinedButton]} 
+                  onPress={() => {
+                    // Start AI optimization
+                    setMode('scanning');
+                    setScanningProgress(0);
+                    
+                    // Simulate optimization process
+                    if (progressInterval.current) {
+                      clearInterval(progressInterval.current);
+                    }
+                    
+                    progressInterval.current = setInterval(() => {
+                      setScanningProgress(prev => {
+                        if (prev >= 100) {
+                          clearInterval(progressInterval.current);
+                          
+                          // Show optimization results
+                          setTimeout(() => {
+                            Alert.alert(
+                              "Listing Optimized",
+                              "We've enhanced your listing with SEO keywords, improved description, and optimized pricing based on market data.",
+                              [{ text: "OK", onPress: () => setMode('form') }]
+                            );
+                            return 100;
+                          }, 500);
+                        }
+                        return prev + 5;
+                      });
+                    }, 100);
+                  }}
+                >
+                  <Icon name="auto-fix" size={20} color={theme.colors.primary} />
+                  <Text style={[styles.buttonText, {color: theme.colors.primary}]}>Optimize</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.button, styles.submitButton]} 
+                  onPress={publishListing}
+                >
+                  <Icon name="rocket-launch-outline" size={20} color="white" />
+                  <Text style={[styles.buttonText, {color: 'white'}]}>Publish</Text>
+                </TouchableOpacity>
               </View>
             </ScrollView>
           </Animated.View>
@@ -816,118 +1030,287 @@ const styles = StyleSheet.create({
   },
   cameraContainer: {
     flex: 1,
+    backgroundColor: '#000',
+  },
+  cameraHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 16,
+    zIndex: 10,
+  },
+  headerButton: {
+    padding: 8,
+  },
+  headerControls: {
+    flexDirection: 'row',
   },
   camera: {
     flex: 1,
   },
-  cameraOverlay: {
+  cameraGuide: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 24,
-  },
-  cameraBoundingBox: {
-    width: 250,
-    height: 250,
-    borderWidth: 2,
-    borderColor: 'white',
-    borderRadius: 8,
-    marginTop: 80,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cameraText: {
-    color: 'white',
-    fontSize: 16,
-    textAlign: 'center',
+  frameGuide: {
+    width: SCREEN_WIDTH * 0.8,
+    height: SCREEN_WIDTH * 0.8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 8,
   },
-  cameraControls: {
+  controlsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     alignItems: 'center',
-    width: '100%',
-    paddingBottom: 24,
+    paddingVertical: 20,
+    paddingHorizontal: 30,
   },
-  cancelButton: {
-    padding: 16,
+  modeButton: {
+    alignItems: 'center',
   },
-  cancelText: {
+  modeText: {
     color: 'white',
-    fontSize: 16,
+    marginTop: 4,
+    fontSize: 12,
   },
   captureButton: {
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: 'rgba(255,255,255,0.3)',
+    borderWidth: 4,
+    borderColor: 'white',
     justifyContent: 'center',
     alignItems: 'center',
   },
   captureInner: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: 'white',
+  },
+  recordingButton: {
+    backgroundColor: 'red',
+    width: 24,
+    height: 24,
+    borderRadius: 4,
   },
   galleryButton: {
-    padding: 16,
-  },
-  scanningContainer: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'white',
   },
-  imagePreviewContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 24,
+  previewContainer: {
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingVertical: 16,
+  },
+  previewScroll: {
+    paddingHorizontal: 16,
+  },
+  previewImageContainer: {
+    marginRight: 12,
+    position: 'relative',
   },
   previewImage: {
-    width: 100,
-    height: 100,
+    width: 80,
+    height: 80,
     borderRadius: 8,
-    margin: 4,
   },
-  scanningTitle: {
-    fontSize: 20,
+  mediaNumberBadge: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mediaNumber: {
+    color: 'white',
+    fontSize: 12,
     fontWeight: 'bold',
-    marginBottom: 24,
-    textAlign: 'center',
   },
-  progressContainer: {
+  videoIndicator: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+  },
+  deleteMediaButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12,
+  },
+  doneButton: {
+    backgroundColor: theme.colors.primary,
+    marginHorizontal: 16,
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  doneButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  cameraLoading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000',
+  },
+  cameraLoadingText: {
+    color: 'white',
+    marginTop: 16,
+  },
+  cameraErrorText: {
+    color: 'white',
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  previewTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  previewContent: {
+    flex: 1,
+  },
+  previewSection: {
+    marginTop: 24,
+  },
+  closePreviewButton: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    padding: 8,
+  },
+  platformPreviewTabs: {
+    marginBottom: 16,
+  },
+  platformPreviewTab: {
     flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
-    marginBottom: 24,
-  },
-  progressBar: {
-    flex: 1,
-    height: 8,
-    backgroundColor: '#eee',
-    borderRadius: 4,
-    overflow: 'hidden',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
   },
-  progressFill: {
-    height: '100%',
+  platformPreviewIcon: {
+    marginRight: 4,
   },
-  progressText: {
-    width: 40,
-    textAlign: 'right',
+  platformPreviewText: {
+    fontSize: 14,
+    color: '#777',
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    position: 'relative',
+  },
+  previewPlatformTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  previewBody: {
+    flexDirection: 'row',
+  },
+  previewImageCount: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  previewImageCountText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  previewProductDetails: {
+    flex: 1,
+  },
+  previewProductTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  previewProductPrice: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0E8F7F',
+    marginBottom: 8,
+  },
+  previewProductDescription: {
     fontSize: 14,
     color: '#555',
+    marginBottom: 12,
   },
-  scanningSubtitle: {
-    fontSize: 16,
+  previewMeta: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  previewMetaBadge: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  previewMetaBadgeText: {
+    fontSize: 12,
+    color: '#555',
+  },
+  previewMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  previewMetaText: {
+    fontSize: 12,
     color: '#777',
-    textAlign: 'center',
+    marginLeft: 4,
   },
   formContainer: {
     flex: 1,
     padding: 16,
+  },
+  imagesSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: '#777',
+  },
+  imagesContainer: {
+    flexDirection: 'row',
+  },
+  imageContainer: {
+    marginRight: 8,
+  },
+  image: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 12,
   },
   addImageButton: {
     width: 100,
@@ -1006,30 +1389,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginVertical: 24,
   },
-  // Platform preview styles
   platformPreview: {
     borderWidth: 1,
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
-  },
-  previewHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    position: 'relative',
-  },
-  previewPlatformTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  previewBody: {
-    flexDirection: 'row',
-  },
-  previewImageContainer: {
-    position: 'relative',
-    marginRight: 16,
   },
   previewProductImage: {
     width: 120,
@@ -1044,118 +1408,83 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  previewImageCount: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  previewImageCountText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  previewProductDetails: {
-    flex: 1,
-  },
-  previewProductTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 8,
-  },
-  previewProductPrice: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#0E8F7F',
-    marginBottom: 8,
-  },
-  previewProductDescription: {
-    fontSize: 14,
-    color: '#555',
-    marginBottom: 12,
-  },
-  previewMeta: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  previewMetaBadge: {
-    backgroundColor: '#f0f0f0',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginRight: 8,
-    marginBottom: 8,
-  },
-  previewMetaBadgeText: {
-    fontSize: 12,
-    color: '#555',
-  },
-  previewMetaItem: {
+  button: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 12,
+    justifyContent: 'center',
+    height: 52,
+    borderRadius: 8,
+    paddingHorizontal: 12,
   },
-  previewMetaText: {
-    fontSize: 12,
-    color: '#777',
-    marginLeft: 4,
-  },
-  // Platform preview tabs
-  platformPreviewTabs: {
-    marginBottom: 16,
-  },
-  platformPreviewTab: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginRight: 8,
-    borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-  },
-  platformPreviewIcon: {
-    marginRight: 4,
-  },
-  platformPreviewText: {
+  buttonText: {
+    fontWeight: '600',
     fontSize: 14,
-    color: '#777',
+    marginLeft: 6,
   },
-  previewTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
+  outlinedButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
   },
-  previewContent: {
-    flex: 1,
-  },
-  previewSection: {
+  buttonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginTop: 24,
+    marginBottom: 24,
   },
-  closePreviewButton: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    padding: 8,
+  draftButton: {
+    flex: 0.9,
+    marginRight: 8,
   },
-  // Other miscellanous styles
-  cameraLoading: {
+  previewButton: {
+    flex: 0.9,
+    marginHorizontal: 4,
+  },
+  optimizeButton: {
+    flex: 0.9,
+    marginHorizontal: 4,
+  },
+  submitButton: {
+    flex: 1,
+    marginLeft: 8,
+    backgroundColor: theme.colors.primary,
+  },
+  scanningContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  cameraLoadingText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#555',
-    marginTop: 24,
+  imagePreviewContainer: {
+    marginBottom: 24,
   },
-  cameraErrorText: {
+  scanningTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#FF5252',
-    marginTop: 24,
+    marginBottom: 16,
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  progressBar: {
+    flex: 1,
+    height: 8,
+    backgroundColor: '#eee',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+  },
+  progressText: {
+    fontSize: 14,
+    color: '#555',
+    marginLeft: 8,
+  },
+  scanningSubtitle: {
+    fontSize: 14,
+    color: '#777',
   },
 });
 

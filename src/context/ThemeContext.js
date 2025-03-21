@@ -65,6 +65,9 @@ const ThemeContext = createContext(theme);
 
 export const useTheme = () => useContext(ThemeContext);
 
+// Add a default export for the theme object
+export default theme;
+
 export const ThemeProvider = ({ children }) => {
   return (
     <ThemeContext.Provider value={theme}>

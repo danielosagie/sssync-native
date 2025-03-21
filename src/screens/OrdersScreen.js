@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ScrollView, TextInput } from 'react-native';
 import Animated, { FadeInUp } from 'react-native-reanimated';
 import { useTheme } from '../context/ThemeContext';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -9,29 +9,49 @@ import { mockOrders } from '../data/mockData';
 
 const OrdersScreen = () => {
   const theme = useTheme();
-  const [selectedTab, setSelectedTab] = useState('All');
-  const [selectedFilter, setSelectedFilter] = useState('All');
+  const [selectedPlatform, setSelectedPlatform] = useState('All');
+  const [selectedStatus, setSelectedStatus] = useState('All');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Extended mock orders for a fuller list
   const extendedOrders = [...mockOrders, ...mockOrders.map((order, index) => ({
     ...order,
-    id: `#${1189 + index}`,
+    id: `${1189 + index}`,
   }))];
   
   const filteredOrders = extendedOrders.filter(order => {
-    if (selectedTab !== 'All' && !order.platform.includes(selectedTab)) {
+    // Filter by platform
+    if (selectedPlatform !== 'All' && order.platform !== selectedPlatform) {
       return false;
     }
     
-    if (selectedFilter !== 'All') {
-      const status = selectedFilter.toLowerCase();
-      if (status !== order.status.toLowerCase()) {
-        return false;
-      }
+    // Filter by status
+    if (selectedStatus !== 'All' && 
+        order.status.toLowerCase() !== selectedStatus.toLowerCase()) {
+      return false;
+    }
+    
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      return (
+        order.id.toLowerCase().includes(query) ||
+        order.customer.toLowerCase().includes(query) ||
+        order.platform.toLowerCase().includes(query) ||
+        order.status.toLowerCase().includes(query)
+      );
     }
     
     return true;
   });
+  
+  // Get unique platforms from orders
+  const platforms = ['All', ...new Set(extendedOrders.map(order => order.platform))];
+  
+  // Get unique statuses from orders
+  const statuses = ['All', ...new Set(extendedOrders.map(order => 
+    order.status.charAt(0).toUpperCase() + order.status.slice(1)
+  ))];
   
   return (
     <View style={styles.container}>
@@ -58,76 +78,128 @@ const OrdersScreen = () => {
         </Card>
         
         <Card>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabScrollView}>
-            <View style={styles.tabContainer}>
-              {['All', 'Shopify', 'Amazon', 'Clover', 'Square'].map((tab) => (
-                <TouchableOpacity 
-                  key={tab}
-                  style={[styles.tab, selectedTab === tab ? styles.selectedTab : null]}
-                  onPress={() => setSelectedTab(tab)}
-                >
-                  <Text style={[
-                    styles.tabText, 
-                    selectedTab === tab ? { color: theme.colors.primary } : { color: theme.colors.textSecondary }
-                  ]}>
-                    {tab}
-                  </Text>
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <View style={styles.searchBar}>
+              <Icon name="magnify" size={20} color="#999" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search orders..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+              />
+              {searchQuery ? (
+                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                  <Icon name="close" size={20} color="#999" />
                 </TouchableOpacity>
-              ))}
+              ) : null}
             </View>
-          </ScrollView>
-          
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScrollView}>
-            <View style={styles.filterContainer}>
-              {['All', 'Delivered', 'In Transit', 'Returned', 'Off-Loaded'].map((filter) => (
-                <TouchableOpacity
-                  key={filter}
-                  style={[
-                    styles.filterChip,
-                    selectedFilter === filter && { backgroundColor: theme.colors.primary }
-                  ]}
-                  onPress={() => setSelectedFilter(filter)}
-                >
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      selectedFilter === filter && { color: 'white' }
-                    ]}
-                  >
-                    {filter}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </ScrollView>
-          
-          <View style={styles.listHeader}>
-            <Text style={[styles.listHeaderText, styles.idHeader]}>Order ID</Text>
-            <Text style={[styles.listHeaderText, styles.salesHeader]}>Sales</Text>
-            <Text style={[styles.listHeaderText, styles.statusHeader]}>Status</Text>
-            <Text style={[styles.listHeaderText, styles.stockHeader]}>Stock</Text>
-            <Text style={[styles.listHeaderText, styles.platformHeader]}>Platform</Text>
-            <View style={styles.actionsHeader} />
           </View>
-
-          {filteredOrders.map((order, index) => (
-            <Animated.View 
-              key={order.id} 
-              entering={FadeInUp.delay(50 * index).duration(300)}
+          
+          {/* Platform Filter */}
+          <View style={styles.filterContainer}>
+            <View style={styles.filterHeader}>
+              <Text style={styles.filterLabel}>Platform:</Text>
+            </View>
+            
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false}
+              style={styles.tabScrollView}
             >
-              <OrderListItem order={order} />
-            </Animated.View>
-          ))}
-          
-          <View style={styles.paginationContainer}>
-            <TouchableOpacity style={styles.paginationButton}>
-              <Icon name="chevron-left" size={20} color="#777" />
-            </TouchableOpacity>
-            <Text style={styles.paginationText}>Page 1 of 4</Text>
-            <TouchableOpacity style={styles.paginationButton}>
-              <Icon name="chevron-right" size={20} color="#777" />
-            </TouchableOpacity>
+              <View style={styles.tabContainer}>
+                {platforms.map((platform) => (
+                  <TouchableOpacity 
+                    key={platform}
+                    style={[
+                      styles.tab, 
+                      selectedPlatform === platform && [
+                        styles.selectedTab, 
+                        { borderBottomColor: theme.colors.primary }
+                      ]
+                    ]}
+                    onPress={() => setSelectedPlatform(platform)}
+                  >
+                    <Text style={[
+                      styles.tabText, 
+                      selectedPlatform === platform 
+                        ? { color: theme.colors.primary } 
+                        : { color: theme.colors.textSecondary }
+                    ]}>
+                      {platform}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
           </View>
+          
+          {/* Status Filter */}
+          <View style={styles.filterContainer}>
+            <ScrollView 
+              horizontal 
+              showsHorizontalScrollIndicator={false} 
+              style={styles.filterScrollView}
+            >
+              <View style={styles.filterChipsContainer}>
+                {statuses.map((status) => (
+                  <TouchableOpacity
+                    key={status}
+                    style={[
+                      styles.filterChip,
+                      selectedStatus === status && { 
+                        backgroundColor: theme.colors.primary 
+                      }
+                    ]}
+                    onPress={() => setSelectedStatus(status)}
+                  >
+                    <Text
+                      style={[
+                        styles.filterChipText,
+                        selectedStatus === status && { color: 'white' }
+                      ]}
+                    >
+                      {status}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
+          </View>
+          
+          {/* Orders List */}
+          <View style={styles.ordersListContainer}>
+            {filteredOrders.length > 0 ? (
+              filteredOrders.map((order, index) => (
+                <Animated.View 
+                  key={order.id} 
+                  entering={FadeInUp.delay(50 * index).duration(300)}
+                >
+                  <OrderListItem order={order} />
+                </Animated.View>
+              ))
+            ) : (
+              <View style={styles.emptyState}>
+                <Icon name="package-variant" size={40} color="#CCC" />
+                <Text style={styles.emptyStateText}>No orders found</Text>
+                <Text style={styles.emptyStateSubtext}>
+                  Try changing your filters to see more orders
+                </Text>
+              </View>
+            )}
+          </View>
+          
+          {filteredOrders.length > 0 && (
+            <View style={styles.paginationContainer}>
+              <TouchableOpacity style={styles.paginationButton}>
+                <Icon name="chevron-left" size={20} color="#777" />
+              </TouchableOpacity>
+              <Text style={styles.paginationText}>Page 1 of 4</Text>
+              <TouchableOpacity style={styles.paginationButton}>
+                <Icon name="chevron-right" size={20} color="#777" />
+              </TouchableOpacity>
+            </View>
+          )}
         </Card>
       </Animated.View>
     </View>
@@ -169,13 +241,45 @@ const styles = StyleSheet.create({
     height: 40,
     backgroundColor: '#eee',
   },
+  searchContainer: {
+    marginBottom: 16,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    height: 40,
+    fontSize: 14,
+  },
+  filterContainer: {
+    marginBottom: 16,
+  },
+  filterHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#555',
+  },
   tabScrollView: {
     marginBottom: 8,
   },
   tabContainer: {
     flexDirection: 'row',
-    paddingVertical: 8,
-    marginRight: 24,
+    paddingVertical: 4,
   },
   tab: {
     marginRight: 24,
@@ -184,7 +288,6 @@ const styles = StyleSheet.create({
   },
   selectedTab: {
     borderBottomWidth: 2,
-    borderBottomColor: '#0E8F7F',
   },
   tabText: {
     fontSize: 14,
@@ -193,7 +296,7 @@ const styles = StyleSheet.create({
   filterScrollView: {
     marginBottom: 16,
   },
-  filterContainer: {
+  filterChipsContainer: {
     flexDirection: 'row',
     paddingVertical: 4,
   },
@@ -208,44 +311,37 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#555',
   },
-  listHeader: {
-    flexDirection: 'row',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+  ordersListContainer: {
+    marginBottom: 16,
   },
-  listHeaderText: {
-    fontSize: 12,
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 40,
+  },
+  emptyStateText: {
+    fontSize: 16,
     fontWeight: 'bold',
+    color: '#555',
+    marginTop: 16,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
     color: '#777',
-  },
-  idHeader: {
-    width: 100,
-  },
-  salesHeader: {
-    width: 80,
-  },
-  statusHeader: {
-    width: 100,
-  },
-  stockHeader: {
-    width: 60,
-  },
-  platformHeader: {
-    flex: 1,
-  },
-  actionsHeader: {
-    width: 40,
+    marginTop: 8,
+    textAlign: 'center',
   },
   paginationContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 16,
+    paddingTop: 8,
     paddingBottom: 8,
   },
   paginationButton: {
     padding: 8,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 4,
   },
   paginationText: {
     marginHorizontal: 16,

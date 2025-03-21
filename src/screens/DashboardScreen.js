@@ -3,6 +3,7 @@ import { View, Text, ScrollView, StyleSheet, Dimensions, TouchableOpacity, TextI
 import { LineChart } from 'react-native-chart-kit';
 import Animated, { FadeInUp, FadeInRight } from 'react-native-reanimated';
 import { useTheme } from '../context/ThemeContext';
+import { useNavigation } from '@react-navigation/native';
 import Card from '../components/Card';
 import ChannelSalesBar from '../components/ChannelSalesBar';
 import OrderListItem from '../components/OrderListItem';
@@ -11,6 +12,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const DashboardScreen = () => {
   const theme = useTheme();
+  const navigation = useNavigation();
   const [timeFrame, setTimeFrame] = useState('12 months');
   const [selectedTab, setSelectedTab] = useState('All');
   const [selectedPlatform, setSelectedPlatform] = useState('All');
@@ -99,149 +101,161 @@ const DashboardScreen = () => {
               style={styles.chart}
             />
           </Card>
+          
 
           {/* Order Summary */}
           <Card>
             <Text style={[styles.sectionTitle, {marginBottom: 16}]}>Order Summary</Text>
             
             {/* Platform Filter Tabs */}
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={styles.platformTabsContainer}
+            <View style={styles.filterContainer}>
+              <View style={styles.filterHeader}>
+                <Text style={styles.filterLabel}>Platform:</Text>
+                <TouchableOpacity>
+                  <Text style={styles.dropdownText}>
+                    {selectedPlatform} <Icon name="chevron-down" size={14} color="#777" />
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.platformTabsContainer}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.platformTab, 
+                    selectedPlatform === 'All' && 
+                      { backgroundColor: theme.colors.primary + '20' }
+                  ]}
+                  onPress={() => setSelectedPlatform('All')}
+                >
+                  <Text
+                    style={[
+                      styles.platformTabText,
+                      { color: selectedPlatform === 'All' ? theme.colors.primary : theme.colors.text }
+                    ]}
+                  >
+                    All
+                  </Text>
+                </TouchableOpacity>
+                
+                {mockChannelData.map((channel) => (
+                  <TouchableOpacity
+                    key={channel.name}
+                    style={[
+                      styles.platformTab, 
+                      selectedPlatform === channel.name && 
+                        { backgroundColor: theme.colors.primary + '20' }
+                    ]}
+                    onPress={() => setSelectedPlatform(channel.name)}
+                  >
+                    <Text
+                      style={[
+                        styles.platformTabText,
+                        { color: selectedPlatform === channel.name ? theme.colors.primary : theme.colors.text }
+                      ]}
+                    >
+                      {channel.name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            
+            {/* Status Filter Tabs */}
+            <View style={styles.filterContainer}>
+              <View style={styles.filterHeader}>
+                <Text style={styles.filterLabel}>Status:</Text>
+                <TouchableOpacity>
+                  <Text style={styles.dropdownText}>
+                    {selectedTab} <Icon name="chevron-down" size={14} color="#777" />
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={styles.statusTabsContainer}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.platformTab, 
+                    selectedTab === 'All' && 
+                      { backgroundColor: theme.colors.primary + '20' }
+                  ]}
+                  onPress={() => setSelectedTab('All')}
+                >
+                  <Text
+                    style={[
+                      styles.platformTabText,
+                      { color: selectedTab === 'All' ? theme.colors.primary : theme.colors.text }
+                    ]}
+                  >
+                    All
+                  </Text>
+                </TouchableOpacity>
+                
+                {['Pending', 'Processing', 'In Transit', 'Delivered', 'Completed', 'Returned', 'Offloaded'].map((status) => (
+                  <TouchableOpacity
+                    key={status}
+                    style={[
+                      styles.platformTab, 
+                      selectedTab === status && 
+                        { backgroundColor: theme.colors.primary + '20' }
+                    ]}
+                    onPress={() => setSelectedTab(status)}
+                  >
+                    <Text
+                      style={[
+                        styles.platformTabText,
+                        { color: selectedTab === status ? theme.colors.primary : theme.colors.text }
+                      ]}
+                    >
+                      {status}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+            
+            {/* Order List */}
+            <View style={styles.orderList}>
+              {mockOrders
+                .filter(order => 
+                  (selectedPlatform === 'All' || order.platform === selectedPlatform) &&
+                  (selectedTab === 'All' || order.status.toLowerCase() === selectedTab.toLowerCase())
+                )
+                .slice(0, 5) // Show only first 5 orders
+                .map((order, index) => (
+                  <OrderListItem 
+                    key={order.id} 
+                    order={order} 
+                    delay={index * 100}
+                  />
+                ))}
+                
+              {mockOrders.filter(order => 
+                (selectedPlatform === 'All' || order.platform === selectedPlatform) &&
+                (selectedTab === 'All' || order.status.toLowerCase() === selectedTab.toLowerCase())
+              ).length === 0 && (
+                <View style={styles.emptyState}>
+                  <Icon name="package-variant" size={40} color="#CCC" />
+                  <Text style={styles.emptyStateText}>No orders found</Text>
+                  <Text style={styles.emptyStateSubtext}>
+                    Try changing your filters to see more orders
+                  </Text>
+                </View>
+              )}
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.viewAllButton}
+              onPress={() => navigation.navigate('Orders')}
             >
-              <TouchableOpacity
-                style={[
-                  styles.platformTab, 
-                  selectedPlatform === 'All' && 
-                    { backgroundColor: theme.colors.primary + '20' }
-                ]}
-                onPress={() => setSelectedPlatform('All')}
-              >
-                <Text
-                  style={[
-                    styles.platformTabText,
-                    { color: selectedPlatform === 'All' ? theme.colors.primary : theme.colors.text }
-                  ]}
-                >
-                  All Platforms
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.platformTab, 
-                  selectedPlatform === 'Shopify' && 
-                    { backgroundColor: theme.colors.primary + '20' }
-                ]}
-                onPress={() => setSelectedPlatform('Shopify')}
-              >
-                <Text
-                  style={[
-                    styles.platformTabText,
-                    { color: selectedPlatform === 'Shopify' ? theme.colors.primary : theme.colors.text }
-                  ]}
-                >
-                  Shopify
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.platformTab, 
-                  selectedPlatform === 'Amazon' && 
-                    { backgroundColor: theme.colors.primary + '20' }
-                ]}
-                onPress={() => setSelectedPlatform('Amazon')}
-              >
-                <Text
-                  style={[
-                    styles.platformTabText,
-                    { color: selectedPlatform === 'Amazon' ? theme.colors.primary : theme.colors.text }
-                  ]}
-                >
-                  Amazon
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.platformTab, 
-                  selectedPlatform === 'eBay' && 
-                    { backgroundColor: theme.colors.primary + '20' }
-                ]}
-                onPress={() => setSelectedPlatform('eBay')}
-              >
-                <Text
-                  style={[
-                    styles.platformTabText,
-                    { color: selectedPlatform === 'eBay' ? theme.colors.primary : theme.colors.text }
-                  ]}
-                >
-                  eBay
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-            
-            {/* Status Filter Tabs - Keep existing status tabs */}
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={styles.statusTabsContainer}
-            >
-              <TouchableOpacity
-                style={[styles.tab, selectedTab === 'All' && styles.selectedTab]}
-                onPress={() => setSelectedTab('All')}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    { color: selectedTab === 'All' ? theme.colors.primary : theme.colors.text }
-                  ]}
-                >
-                  All
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.tab, selectedTab === 'Pending' && styles.selectedTab]}
-                onPress={() => setSelectedTab('Pending')}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    { color: selectedTab === 'Pending' ? theme.colors.primary : theme.colors.text }
-                  ]}
-                >
-                  Pending
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.tab, selectedTab === 'Completed' && styles.selectedTab]}
-                onPress={() => setSelectedTab('Completed')}
-              >
-                <Text
-                  style={[
-                    styles.tabText,
-                    { color: selectedTab === 'Completed' ? theme.colors.primary : theme.colors.text }
-                  ]}
-                >
-                  Completed
-                </Text>
-              </TouchableOpacity>
-            </ScrollView>
-            
-            {/* Order list - filtered by both platform and status */}
-            {mockOrders
-              .filter(order => selectedPlatform === 'All' || order.platform === selectedPlatform)
-              .filter(order => selectedTab === 'All' || order.status === selectedTab.toLowerCase())
-              .slice(0, 3)
-              .map((order, index) => (
-                <OrderListItem key={order.id} order={order} />
-              ))
-            }
-            
-            <TouchableOpacity style={styles.viewAllButton}>
-              <Text style={[styles.viewAllButtonText, { color: theme.colors.primary }]}>
+              <Text style={[styles.viewAllButtonText, {color: theme.colors.primary}]}>
                 View All Orders
               </Text>
             </TouchableOpacity>
@@ -427,6 +441,9 @@ const styles = StyleSheet.create({
   viewAllButton: {
     alignItems: 'center',
     padding: 12,
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
   },
   viewAllButtonText: {
     fontSize: 14,
@@ -450,7 +467,43 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   statusTabsContainer: {
+    marginBottom: 0,
+  },
+  orderList: {
+    marginTop: 0,
+  },
+  emptyState: {
+    alignItems: 'center',
+    padding: 24,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#777',
+    marginTop: 12,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: '#999',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  filterContainer: {
     marginBottom: 16,
+  },
+  filterHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  filterLabel: {
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  dropdownText: {
+    fontSize: 14,
+    color: '#777',
   },
 });
 

@@ -11,7 +11,7 @@ import { mockOrders } from '../data/mockData';
 import { Platform } from 'react-native';
 
 const InventoryOrdersScreen = () => {
-  const theme = useTheme();
+  const theme = useTheme() || { colors: { primary: '#0E8F7F' } };  
   const [activeTab, setActiveTab] = useState('inventory'); // 'inventory' or 'orders'
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('date');
@@ -64,64 +64,141 @@ const InventoryOrdersScreen = () => {
     </TouchableOpacity>
   );
   
-  const renderOrderItem = ({ item }) => (
-    <Card style={styles.orderCard}>
-      <View style={styles.orderHeader}>
-        <View>
-          <Text style={styles.orderId}>{item.id}</Text>
-          <Text style={styles.orderDate}>Today</Text>
-        </View>
-        <View style={[
-          styles.statusBadge, 
-          { backgroundColor: getStatusColor(item.status, theme) + '20' }
-        ]}>
-          <Text style={[styles.statusText, { color: getStatusColor(item.status, theme) }]}>{item.status}</Text>
-        </View>
-      </View>
-      
-      <View style={styles.orderDetails}>
-        <View style={styles.orderDetail}>
-          <Text style={styles.orderDetailLabel}>Platform</Text>
-          <Text style={styles.orderDetailValue}>{item.platform}</Text>
+  const renderOrderItem = ({ item }) => {
+    const trackButtonStyle = {
+      backgroundColor: theme.colors.primary + '00'
+    };
+
+    return (
+      <Card style={styles.orderCard}>
+        <View style={styles.orderHeader}>
+          <View style={styles.orderIdContainer}>
+            <Text style={styles.orderId}>#{item.id || 'Unknown'}</Text>
+            <View style={[
+              styles.platformBadge, 
+              { backgroundColor: getPlatformColor(item.platform, theme) + '20' }
+            ]}>
+              <Text style={[
+                styles.platformName, 
+                { color: getPlatformColor(item.platform, theme) }
+              ]}>
+                {item.platform || 'Unknown'}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.orderDate}>{formatDate(item.date)}</Text>
         </View>
         
-        <View style={styles.orderDetail}>
-          <Text style={styles.orderDetailLabel}>Sales</Text>
-          <Text style={styles.orderDetailValue}>${item.sales}</Text>
+        <View style={styles.customerRow}>
+          <View style={styles.customerInfo}>
+            <Icon name="account" size={14} color="#777" style={styles.customerIcon} />
+            <Text style={styles.customerName}>{item.customer || 'Unknown customer'}</Text>
+          </View>
+          <Text style={styles.orderItems}>
+            {item.items ? `${item.items} item${item.items > 1 ? 's' : ''}` : ''}
+          </Text>
         </View>
         
-        <View style={styles.orderDetail}>
-          <Text style={styles.orderDetailLabel}>Stock</Text>
-          <Text style={styles.orderDetailValue}>{item.stock}</Text>
+        <View style={styles.orderFooter}>
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status, theme) + '20' }]}>
+            <Icon 
+              name={getStatusIcon(item.status)} 
+              size={14} 
+              color={getStatusColor(item.status, theme)} 
+              style={styles.statusIcon} 
+            />
+            <Text 
+              style={[styles.statusText, { color: getStatusColor(item.status, theme) }]}
+            >
+              {item.status ? item.status.charAt(0).toUpperCase() + item.status.slice(1) : 'Unknown'}
+            </Text>
+          </View>
+          
+          <Text style={styles.orderTotal}>${item.total ? item.total.toFixed(2) : '0.00'}</Text>
         </View>
-      </View>
-      
-      <View style={styles.orderActions}>
-        <Button title="Details" outline style={styles.orderButton} />
-        <Button title="Track" icon="map-marker" style={styles.orderButton} />
-      </View>
-    </Card>
-  );
+        
+        <View style={styles.divider} />
+        
+        <View style={styles.actionButtons}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => console.log('View details', item.id)}
+          >
+            <Icon name="information-outline" size={16} color="#777" />
+            <Text style={styles.actionButtonText}>Details</Text>
+          </TouchableOpacity>
+          
+          <View style={styles.buttonDivider} />
+
+          <TouchableOpacity 
+            style={[styles.actionButton, trackButtonStyle]}
+            onPress={() => console.log('Track order', item.id)}
+          >
+            <Icon name="truck-delivery-outline" size={16} color={theme.colors.primary} />
+            <Text style={[styles.actionButtonText, {color: theme.colors.primary}]}>Track</Text>
+          </TouchableOpacity>
+          
+          
+        </View>
+      </Card>
+    );
+  };
   
   const getPlatformColor = (platform, theme) => {
-    switch (platform) {
-      case 'shopify':
-        return theme.colors.primary;
-      case 'amazon':
-        return theme.colors.secondary;
-      case 'clover':
-        return theme.colors.accent;
-      case 'square':
-        return '#6C757D';
-      case 'ebay':
-        return '#E53238';
-      case 'depop':
-        return '#FF2300';
-      case 'whatnot':
-        return '#FFC107';
-      default:
-        return theme.colors.primary;
+    if (!platform) return '#999';
+    
+    const platformLower = platform.toLowerCase();
+    
+    if (platformLower.includes('shopify')) return theme.colors.primary;
+    if (platformLower.includes('amazon')) return '#F17F5F';
+    if (platformLower.includes('ebay')) return '#E53238';
+    if (platformLower.includes('clover')) return theme.colors.accent;
+    if (platformLower.includes('square')) return '#6C757D';
+    if (platformLower.includes('etsy')) return '#F56400';
+    if (platformLower.includes('facebook')) return '#1877F2';
+    
+    return theme.colors.primary;
+  };
+  
+  const getStatusIcon = (status) => {
+    if (!status) return 'help-circle-outline'; // Default icon if status is undefined
+    
+    const statusLower = status.toLowerCase();
+    
+    if (statusLower.includes('pending')) return 'timer-sand';
+    if (statusLower.includes('processing')) return 'progress-check';
+    if (statusLower.includes('intransit') || statusLower.includes('in transit')) return 'truck-delivery';
+    if (statusLower.includes('delivered') || statusLower.includes('completed')) return 'check-circle';
+    if (statusLower.includes('returned')) return 'keyboard-return';
+    if (statusLower.includes('offloaded') || statusLower.includes('off-loaded')) return 'package-variant';
+    
+    return 'help-circle-outline'; // Default icon
+  };
+  
+  const formatDate = (dateString) => {
+    if (!dateString) return 'No date';
+    
+    const date = new Date(dateString);
+    const now = new Date();
+    
+    // Check if date is today
+    if (date.toDateString() === now.toDateString()) {
+      return 'Today';
     }
+    
+    // Check if date is yesterday
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) {
+      return 'Yesterday';
+    }
+    
+    // Otherwise return formatted date
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
+    });
   };
   
   const getStatusColor = (status, theme) => {
@@ -589,58 +666,125 @@ const styles = StyleSheet.create({
   },
   orderCard: {
     marginBottom: 12,
+    borderRadius: 12,
+    padding: 0,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   orderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  orderIdContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   orderId: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 'bold',
+    marginRight: 8,
   },
   orderDate: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#777',
   },
-  statusBadge: {
+  customerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    paddingHorizontal: 16,
+  },
+  customerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  customerIcon: {
+    marginRight: 4,
+  },
+  customerName: {
+    fontSize: 14,
+    color: '#444',
+  },
+  orderItems: {
+    fontSize: 13,
+    color: '#777',
+    backgroundColor: '#f5f5f5',
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
+    paddingVertical: 2,
+    borderRadius: 12,
+  },
+  orderFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+    paddingHorizontal: 16,
+  },
+  platformBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  platformName: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  statusIcon: {
+    marginRight: 4,
   },
   statusText: {
     fontSize: 12,
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  orderDetails: {
+  orderTotal: {
+    fontSize: 15,
+    fontWeight: 'bold',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#f0f0f0',
+    marginHorizontal: 16,
+  },
+  actionButtons: {
     flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingVertical: 12,
-    marginBottom: 12,
+    height: 44,
   },
-  orderDetail: {
+  actionButton: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  orderDetailLabel: {
-    fontSize: 12,
-    color: '#777',
-    marginBottom: 4,
+  buttonDivider: {
+    width: 1,
+    backgroundColor: '#f0f0f0',
   },
-  orderDetailValue: {
+  actionButtonText: {
     fontSize: 14,
     fontWeight: '500',
-  },
-  orderActions: {
-    flexDirection: 'row',
-  },
-  orderButton: {
-    flex: 1,
-    marginHorizontal: 4,
+    marginLeft: 6,
+    color: '#555',
   },
   emptyText: {
     textAlign: 'center',
