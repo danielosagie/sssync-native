@@ -13,15 +13,23 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "sssync.alpha",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
+      "package": "sssync.alpha"
     },
-    "web": {
-    },
+    "web": {},
     "plugins": [
       [
         "expo-camera",
@@ -31,6 +39,11 @@
           "recordAudioAndroid": true
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "b69b9883-c163-494e-aa0a-54b0e70feb3b"
+      }
+    }
   }
-} 
+}

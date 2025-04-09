@@ -719,7 +719,7 @@ const AddListingScreen = () => {
                 <Text style={styles.sectionTitle}>Images</Text>
                 <Text style={styles.sectionSubtitle}>Add up to 10 images of your product</Text>
                 
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} paddingTop={20}>
                   <View style={styles.imagesContainer}>
                     {images.map((image, index) => (
                       <View key={index} style={styles.imageContainer}>
